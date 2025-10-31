@@ -304,7 +304,7 @@ class cheb_conv(nn.Module):
         return F.relu(torch.cat(outputs, dim=-1))
 
 
-class ASTGCN_block(nn.Module):
+class MSDGNN_block(nn.Module):
     """
     MSDGNN block: Adaptive Spatial-Temporal Graph Convolution Block with Dynamic Node Grouping.
 
@@ -316,7 +316,7 @@ class ASTGCN_block(nn.Module):
     """
 
     def __init__(self, DEVICE, in_channels, K, nb_chev_filter, nb_time_filter, time_strides, cheb_polynomials, num_of_vertices, num_of_timesteps):
-        super(ASTGCN_block, self).__init__()
+        super(MSDGNN_block, self).__init__()
 
         self.SAT = SMultiHeadAttention(32, 4)
         self.pos_embed = nn.Parameter(torch.zeros(1, 22, in_channels, 32), requires_grad=True)
@@ -561,16 +561,16 @@ class ASTGCN_block(nn.Module):
         return x_residual
 
 
-class ASTGCN_submodule(nn.Module):
+class MSDGNN_submodule(nn.Module):
     """
     MSDGNN submodule for single temporal scale (hour/day/week).
-    Stacks multiple ASTGCN blocks and applies final convolution for prediction.
+
     """
 
     def __init__(self, DEVICE, nb_block, in_channels, K, nb_chev_filter, nb_time_filter, time_strides, cheb_polynomials, num_for_predict, len_input, num_of_vertices):
         """
         Args:
-            nb_block: Number of ASTGCN blocks
+            nb_block: Number of MSDGCN blocks
             in_channels: Number of input channels
             K: Order of Chebyshev polynomial
             nb_chev_filter: Number of Chebyshev filters
@@ -612,7 +612,7 @@ class ASTGCN_submodule(nn.Module):
 
         return output
 
-class ASTGCN_full_submodule(nn.Module):
+class MSDGNN_full_submodule(nn.Module):
     """
     Full MSDGNN model with multi-scale temporal modeling.
     Combines predictions from hour, day, and week components with learnable fusion weights.
@@ -623,9 +623,9 @@ class ASTGCN_full_submodule(nn.Module):
                     len_input, num_of_vertices,
                     L_tilde, cheb_polynomials):
         super().__init__()
-        self.h_model = ASTGCN_submodule(DEVICE, nb_block, in_channels, K, nb_chev_filter, nb_time_filter, time_strides, cheb_polynomials, num_for_predict, len_input, num_of_vertices)
-        self.d_model = ASTGCN_submodule(DEVICE, nb_block, in_channels, K, nb_chev_filter, nb_time_filter, time_strides, cheb_polynomials, num_for_predict, len_input, num_of_vertices)
-        self.w_model = ASTGCN_submodule(DEVICE, nb_block, in_channels, K, nb_chev_filter, nb_time_filter, time_strides, cheb_polynomials, num_for_predict, len_input, num_of_vertices)
+        self.h_model = MSDGNN_submodule(DEVICE, nb_block, in_channels, K, nb_chev_filter, nb_time_filter, time_strides, cheb_polynomials, num_for_predict, len_input, num_of_vertices)
+        self.d_model = MSDGNN_submodule(DEVICE, nb_block, in_channels, K, nb_chev_filter, nb_time_filter, time_strides, cheb_polynomials, num_for_predict, len_input, num_of_vertices)
+        self.w_model = MSDGNN_submodule(DEVICE, nb_block, in_channels, K, nb_chev_filter, nb_time_filter, time_strides, cheb_polynomials, num_for_predict, len_input, num_of_vertices)
 
         self.W_h = torch.zeros(num_for_predict, requires_grad=True, device=DEVICE)
         self.W_d = torch.zeros(num_for_predict, requires_grad=True, device=DEVICE)
@@ -661,7 +661,7 @@ def make_model(DEVICE, nb_block, in_channels, K, nb_chev_filter, nb_time_filter,
 
     Args:
         DEVICE: Target device (CPU/GPU)
-        nb_block: Number of ASTGCN blocks
+        nb_block: Number of MSDGNN blocks
         in_channels: Number of input channels
         K: Order of Chebyshev polynomial
         nb_chev_filter: Number of Chebyshev filters
@@ -676,7 +676,7 @@ def make_model(DEVICE, nb_block, in_channels, K, nb_chev_filter, nb_time_filter,
     """
     L_tilde = scaled_Laplacian(adj_mx)
     cheb_polynomials = [torch.from_numpy(i).type(torch.FloatTensor).to(DEVICE) for i in cheb_polynomial(L_tilde, K)]
-    model = ASTGCN_full_submodule(  DEVICE, nb_block, in_channels,
+    model = MSDGNN_full_submodule(  DEVICE, nb_block, in_channels,
                                     K, nb_chev_filter, nb_time_filter,
                                     time_strides, cheb_polynomials,
                                     num_for_predict, len_input, num_of_vertices,
